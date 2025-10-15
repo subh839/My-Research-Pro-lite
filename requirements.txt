@@ -11,3 +11,4 @@ urllib3==1.26.18
 six==1.16.0
 setuptools==65.5.0
 wheel==0.38.4
+huggingface-hub==0.16.4
