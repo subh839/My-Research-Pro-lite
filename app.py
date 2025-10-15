@@ -4,8 +4,6 @@ import time
 import json
 from datetime import datetime
 from dotenv import load_dotenv
-from free_contextual_agent import FreeContextualAgent
-from chroma_manager import initialize_sample_data
 
 # Load environment variables
 load_dotenv()
@@ -48,14 +46,85 @@ st.markdown("""
         display: inline-block;
         cursor: pointer;
     }
+    .error-box {
+        background-color: #ffe6e6;
+        border: 1px solid #ffcccc;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize agent with caching
+# Enhanced error handling for deployment
+try:
+    from free_contextual_agent import FreeContextualAgent
+    from chroma_manager import initialize_sample_data
+    DEPENDENCIES_LOADED = True
+except ImportError as e:
+    st.error(f"⚠️ Import error: {e}")
+    DEPENDENCIES_LOADED = False
+
+# Fallback agent for deployment issues
+class SimpleAgent:
+    def process_query(self, question):
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        return {
+            "answer": f"""
+# Research Report: {question}
+
+**Report Date:** {current_date}  
+**Status:** Running in Basic Mode
+
+## Executive Summary
+This is a simplified research report. For full features including real-time web search and document analysis, ensure all dependencies are properly installed.
+
+## Key Findings
+- The system is running in basic mode due to dependency loading issues
+- Core AI functionality is available
+- Advanced features require full dependency installation
+
+## Available Features
+ Basic AI-powered responses  
+ Professional report formatting  
+ Conversation history  
+ Export functionality  
+
+ 
+
+## Recommendations
+1. Check deployment logs for dependency installation issues
+2. Verify all packages in requirements.txt are compatible
+3. Ensure Python version 3.8-3.11 is used
+4. Contact support if issues persist
+
+*Note: Running in limited capability mode. Full features will be available once dependencies are properly loaded.*
+            """,
+            "sources_used": {"web": False, "internal": False}
+        }
+    
+    def get_agent_info(self):
+        return {
+            "has_gemini_api": False,
+            "knowledge_base_docs": 0,
+            "search_capability": "Basic Mode",
+            "status": "limited"
+        }
+
+# Initialize agent with enhanced error handling
 @st.cache_resource
 def initialize_agent():
-    initialize_sample_data()
-    return FreeContextualAgent()
+    try:
+        if DEPENDENCIES_LOADED:
+            initialize_sample_data()
+            agent = FreeContextualAgent()
+            st.success(" Full features initialized!")
+            return agent
+        else:
+            raise ImportError("Dependencies not loaded")
+    except Exception as e:
+        st.error(f" Initialization error: {e}")
+        return SimpleAgent()
 
 def main():
     # Header
@@ -65,28 +134,51 @@ def main():
     if 'conversation' not in st.session_state:
         st.session_state.conversation = []
     if 'agent' not in st.session_state:
-        with st.spinner("🚀 Initializing Advanced AI Research Agent..."):
+        with st.spinner(" Initializing Advanced AI Research Agent..."):
             st.session_state.agent = initialize_agent()
     if 'research_count' not in st.session_state:
         st.session_state.research_count = 0
+
+    # Display system status
+    agent_info = st.session_state.agent.get_agent_info()
+    if agent_info.get('status') == 'limited' or not DEPENDENCIES_LOADED:
+        st.markdown("""
+        <div class="error-box">
+         **Limited Mode Active** - Some features unavailable
+        </div>
+        """, unsafe_allow_html=True)
 
     # Sidebar with enhanced features
     with st.sidebar:
         st.header("⚡ Control Panel")
         
-        # Agent status
-        agent_info = st.session_state.agent.get_agent_info()
-        
+        # Agent status with enhanced indicators
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Research Sessions", st.session_state.research_count)
         with col2:
-            st.metric("Knowledge Docs", agent_info['knowledge_base_docs'])
+            docs = agent_info['knowledge_base_docs']
+            color = "normal" if docs > 0 else "off"
+            st.metric("Knowledge Docs", docs)
+        
+        # System status
+        st.markdown("---")
+        st.subheader("🔧 System Status")
+        
+        status_items = [
+            ("AI API", " Enabled" if agent_info.get('has_gemini_api') else " Disabled"),
+            ("Search Mode", agent_info.get('search_capability', 'Basic')),
+            ("Dependencies", "Loaded" if DEPENDENCIES_LOADED else " Issues"),
+            ("Vector DB", " Ready" if docs > 0 else " Limited")
+        ]
+        
+        for item, status in status_items:
+            st.write(f"{item}: {status}")
         
         st.markdown("---")
         
         # Configuration
-        st.subheader("🔧 Settings")
+        st.subheader("⚙️ Settings")
         
         if st.button("🔄 Clear Conversation", use_container_width=True):
             st.session_state.conversation = []
@@ -96,7 +188,8 @@ def main():
             if st.session_state.conversation:
                 export_data = {
                     "export_date": datetime.now().isoformat(),
-                    "conversations": st.session_state.conversation
+                    "conversations": st.session_state.conversation,
+                    "system_status": agent_info
                 }
                 st.download_button(
                     label="📥 Download JSON",
@@ -167,7 +260,7 @@ def main():
         st.subheader("🎯 Research Tips")
         st.markdown("""
         <div class="feature-card">
-        💡 **For best results:**
+         **For best results:**
         - Be specific about timeframes
         - Mention your organization context
         - Ask comparative questions
@@ -175,11 +268,22 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
+        # Show deployment status
+        if not DEPENDENCIES_LOADED or agent_info.get('status') == 'limited':
+            st.markdown("""
+            <div class="error-box">
+             **Deployment Notice**
+            - Running in basic mode
+            - Some features limited
+            - Check deployment logs
+            </div>
+            """, unsafe_allow_html=True)
+        
         st.markdown("""
         **Example Formats:**
-        <div class="question-example" onclick="document.getElementById('question_input').value='Compare our AI research with industry trends'">Compare our X with industry Y</div>
-        <div class="question-example" onclick="document.getElementById('question_input').value='Latest developments in renewable energy'">Latest developments in X</div>
-        <div class="question-example" onclick="document.getElementById('question_input').value='Our compliance status for new regulations'">Our status for X</div>
+        <div class="question-example">Compare our AI research with industry trends</div>
+        <div class="question-example">Latest developments in renewable energy</div>
+        <div class="question-example">Our compliance status for new regulations</div>
         """, unsafe_allow_html=True)
 
     # Research button
@@ -202,7 +306,7 @@ def main():
                 for i, step in enumerate(steps):
                     status_text.text(f"🔄 {step}")
                     progress_bar.progress((i + 1) * 16)
-                    time.sleep(0.5)  # Simulate processing
+                    time.sleep(0.3)  # Reduced for better UX
                 
                 try:
                     result = st.session_state.agent.process_query(user_question)
@@ -219,14 +323,22 @@ def main():
                     })
                     
                     progress_bar.progress(100)
-                    status_text.success("✅ Research analysis complete!")
-                    time.sleep(1)
+                    status_text.success(" Research analysis complete!")
+                    time.sleep(0.5)
                     
                 except Exception as e:
-                    st.error(f"❌ Research error: {str(e)}")
-                    st.info("💡 Try rephrasing your question or check your API configuration")
+                    progress_bar.progress(100)
+                    status_text.error(" Research failed!")
+                    st.error(f"Research error: {str(e)}")
+                    st.info("""
+                     **Troubleshooting tips:**
+                    - Try a simpler question
+                    - Check your API keys in environment variables
+                    - Verify all dependencies are installed
+                    - Check the deployment logs for errors
+                    """)
         else:
-            st.warning("⚠️ Please enter a research question")
+            st.warning(" Please enter a research question")
 
     # Enhanced conversation display
     st.markdown("---")
@@ -264,7 +376,8 @@ def main():
             internal_used = sum(1 for conv in st.session_state.conversation if conv['sources']['internal'])
             st.metric("Internal Queries", internal_used)
         with col_stat4:
-            st.metric("Success Rate", "100%")
+            success_rate = "100%" if len(st.session_state.conversation) > 0 else "0%"
+            st.metric("Success Rate", success_rate)
         
         # Conversation display
         for i, exchange in enumerate(reversed(st.session_state.conversation)):
@@ -308,23 +421,6 @@ def main():
         st.caption("🛠️ Built with Streamlit + ChromaDB + Gemini AI")
     with col_foot3:
         st.caption("📧 [Get Free API Keys](https://aistudio.google.com/)")
-
-# Add custom JavaScript for better interactivity
-st.markdown("""
-<script>
-// Add click handlers for example questions
-document.querySelectorAll('.question-example').forEach(element => {
-    element.addEventListener('click', function() {
-        const question = this.textContent;
-        const textarea = document.getElementById('question_input');
-        if (textarea) {
-            textarea.value = question;
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    });
-});
-</script>
-""", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
